@@ -17,9 +17,12 @@ interface PaginatedResponse<T> {
 }
 
 export function sendSuccess<T>(res: Response, data: T, statusCode: number = 200) {
-  const response: SuccessResponse<T> = {
+  const response = {
     success: true,
     data,
+    meta: {
+      timestamp: new Date().toISOString(),
+    },
   };
   return res.status(statusCode).json(response);
 }
@@ -33,12 +36,15 @@ export function sendPaginated<T>(
   data: T[],
   pagination: { page: number; limit: number; total: number }
 ) {
-  const response: PaginatedResponse<T> = {
+  const response = {
     success: true,
     data,
     pagination: {
       ...pagination,
       totalPages: Math.ceil(pagination.total / pagination.limit),
+    },
+    meta: {
+      timestamp: new Date().toISOString(),
     },
   };
   return res.status(200).json(response);
