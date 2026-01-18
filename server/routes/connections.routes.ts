@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin } from '../middleware/auth';
-import { sendSuccess, sendCreated, sendNoContent } from '../lib/response';
-import { parseIntParam } from '../lib/validation';
+import { sendSuccess, sendCreated, sendNoContent, sendPaginated } from '../lib/response';
+import { parseIntParam, parseQueryInt } from '../lib/validation';
 import {
   listConnections,
   getConnectionById,
@@ -38,8 +38,10 @@ const updateConnectionSchema = z.object({
  */
 router.get('/', requireAuth, requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const connectionList = await listConnections(req.user!.organizationId);
-    sendSuccess(res, connectionList);
+    const page = parseQueryInt(req.query.page as string, 1, { min: 1 });
+    const limit = parseQueryInt(req.query.limit as string, 20, { min: 1, max: 100 });
+    const result = await listConnections(req.user!.organizationId, page, limit);
+    sendPaginated(res, result.data, result.pagination);
   } catch (error) {
     next(error);
   }

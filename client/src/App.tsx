@@ -14,6 +14,8 @@ import { SettingsPage } from './pages/settings';
 import { TeamPage } from './pages/team';
 import { ConnectionsPage } from './pages/connections';
 import { AdminOrganizationsPage } from './pages/admin/organizations';
+import { NewSourcePage } from './pages/new-source';
+import { ProjectConfigPage } from './pages/project-config';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +41,8 @@ function App() {
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/projects/new" element={<NewProjectPage />} />
               <Route path="/projects/:id" element={<ProjectDetailPage />} />
+              <Route path="/projects/:id/sources/new" element={<NewSourcePage />} />
+              <Route path="/projects/:id/config" element={<ProjectConfigPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/team" element={<TeamPage />} />
               <Route path="/connections" element={<ConnectionsPage />} />

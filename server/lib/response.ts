@@ -1,25 +1,36 @@
 import { Response } from 'express';
 
+interface Meta {
+  timestamp: string;
+}
+
 interface SuccessResponse<T> {
-  success: true;
   data: T;
+  meta: Meta;
 }
 
 interface PaginatedResponse<T> {
-  success: true;
   data: T[];
   pagination: {
     page: number;
     limit: number;
     total: number;
     totalPages: number;
+    hasMore: boolean;
+  };
+  meta: Meta;
+}
+
+function createMeta(): Meta {
+  return {
+    timestamp: new Date().toISOString(),
   };
 }
 
 export function sendSuccess<T>(res: Response, data: T, statusCode: number = 200) {
   const response: SuccessResponse<T> = {
-    success: true,
     data,
+    meta: createMeta(),
   };
   return res.status(statusCode).json(response);
 }
@@ -33,13 +44,15 @@ export function sendPaginated<T>(
   data: T[],
   pagination: { page: number; limit: number; total: number }
 ) {
+  const totalPages = Math.ceil(pagination.total / pagination.limit);
   const response: PaginatedResponse<T> = {
-    success: true,
     data,
     pagination: {
       ...pagination,
-      totalPages: Math.ceil(pagination.total / pagination.limit),
+      totalPages,
+      hasMore: pagination.page < totalPages,
     },
+    meta: createMeta(),
   };
   return res.status(200).json(response);
 }

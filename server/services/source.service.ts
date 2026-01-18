@@ -439,3 +439,79 @@ export async function updateFieldMappings(
     .from(fieldMappings)
     .where(eq(fieldMappings.sourceId, sourceId));
 }
+
+export interface ApiSourceConfig {
+  inbox?: string;
+  status?: string;
+  dateRangeStart?: string;
+  dateRangeEnd?: string;
+}
+
+/**
+ * Create a source from an API connection (e.g., Teamwork Desk)
+ */
+export async function createApiSource(
+  projectId: number,
+  organizationId: number,
+  connectionId: number,
+  config: ApiSourceConfig
+): Promise<SourceListItem> {
+  // Verify project exists and belongs to organization
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(
+      eq(projects.id, projectId),
+      eq(projects.organizationId, organizationId),
+      isNull(projects.deletedAt)
+    ))
+    .limit(1);
+
+  if (!project) {
+    throw new NotFoundError('Project not found');
+  }
+
+  // Verify connection exists and belongs to organization
+  const [connection] = await db
+    .select({
+      id: connections.id,
+      name: connections.name,
+      type: connections.type,
+    })
+    .from(connections)
+    .where(and(
+      eq(connections.id, connectionId),
+      eq(connections.organizationId, organizationId)
+    ))
+    .limit(1);
+
+  if (!connection) {
+    throw new NotFoundError('Connection not found');
+  }
+
+  // Create source with pending status (data will be fetched async)
+  const [source] = await db
+    .insert(sources)
+    .values({
+      projectId,
+      type: 'api',
+      name: `${connection.name} Import`,
+      connectionId,
+      apiConfig: config,
+      status: 'pending',
+    })
+    .returning();
+
+  // TODO: Queue background job to fetch data from API
+  // For now, return the pending source
+
+  return {
+    id: source.id,
+    name: source.name,
+    type: source.type,
+    recordCount: source.recordCount,
+    status: source.status,
+    createdAt: source.createdAt,
+    connectionId: source.connectionId,
+  };
+}

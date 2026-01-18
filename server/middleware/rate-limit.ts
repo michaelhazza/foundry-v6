@@ -7,9 +7,8 @@ export const standardRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    success: false,
     error: {
-      code: 'TOO_MANY_REQUESTS',
+      code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many requests, please try again later',
     },
   },
@@ -22,9 +21,8 @@ export const authRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    success: false,
     error: {
-      code: 'TOO_MANY_REQUESTS',
+      code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many authentication attempts, please try again later',
     },
   },
@@ -37,10 +35,23 @@ export const uploadRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    success: false,
     error: {
-      code: 'TOO_MANY_REQUESTS',
+      code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many uploads, please try again later',
+    },
+  },
+});
+
+// Rate limit for processing operations
+export const processingRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 processing requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many processing requests, please try again later',
     },
   },
 });

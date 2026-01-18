@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth';
+import { processingRateLimit } from '../middleware/rate-limit';
 import { sendSuccess, sendCreated } from '../lib/response';
 import { parseIntParam } from '../lib/validation';
 import {
@@ -18,7 +19,7 @@ const router = Router({ mergeParams: true });
  * POST /api/projects/:projectId/preview
  * Generate preview of processing
  */
-router.post('/preview', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/preview', requireAuth, processingRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = parseIntParam(req.params.projectId as string, 'projectId');
     const preview = await generatePreview(projectId, req.user!.organizationId);
@@ -32,7 +33,7 @@ router.post('/preview', requireAuth, async (req: Request, res: Response, next: N
  * POST /api/projects/:projectId/process
  * Trigger a new processing run
  */
-router.post('/process', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/process', requireAuth, processingRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = parseIntParam(req.params.projectId as string, 'projectId');
     const run = await triggerProcessingRun(projectId, req.user!.organizationId, req.user!.id);

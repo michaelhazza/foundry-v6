@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { connections, type Connection } from '../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, count } from 'drizzle-orm';
 import { NotFoundError, BadRequestError } from '../errors';
 import { encrypt, decrypt } from '../lib/encryption';
 
@@ -25,11 +25,33 @@ export interface TeamworkCredentials {
   subdomain: string;
 }
 
+export interface PaginatedResult<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+  };
+}
+
 /**
- * List connections for an organization
+ * List connections for an organization with pagination
  */
-export async function listConnections(organizationId: number): Promise<ConnectionListItem[]> {
-  return db
+export async function listConnections(
+  organizationId: number,
+  page: number = 1,
+  limit: number = 20
+): Promise<PaginatedResult<ConnectionListItem>> {
+  // Get total count
+  const [totalResult] = await db
+    .select({ count: count() })
+    .from(connections)
+    .where(eq(connections.organizationId, organizationId));
+
+  const total = totalResult.count;
+  const offset = (page - 1) * limit;
+
+  const data = await db
     .select({
       id: connections.id,
       name: connections.name,
@@ -41,7 +63,14 @@ export async function listConnections(organizationId: number): Promise<Connectio
     })
     .from(connections)
     .where(eq(connections.organizationId, organizationId))
-    .orderBy(desc(connections.createdAt));
+    .orderBy(desc(connections.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return {
+    data,
+    pagination: { page, limit, total },
+  };
 }
 
 /**

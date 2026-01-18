@@ -26,10 +26,35 @@ export interface ProjectDetails extends ProjectListItem {
   config: ProcessingConfig | null;
 }
 
+export interface PaginatedResult<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+  };
+}
+
 /**
- * List projects for an organization
+ * List projects for an organization with pagination
  */
-export async function listProjects(organizationId: number): Promise<ProjectListItem[]> {
+export async function listProjects(
+  organizationId: number,
+  page: number = 1,
+  limit: number = 20
+): Promise<PaginatedResult<ProjectListItem>> {
+  // Get total count
+  const [totalResult] = await db
+    .select({ count: count() })
+    .from(projects)
+    .where(and(
+      eq(projects.organizationId, organizationId),
+      isNull(projects.deletedAt)
+    ));
+
+  const total = totalResult.count;
+  const offset = (page - 1) * limit;
+
   const projectList = await db
     .select({
       id: projects.id,
@@ -43,32 +68,34 @@ export async function listProjects(organizationId: number): Promise<ProjectListI
       eq(projects.organizationId, organizationId),
       isNull(projects.deletedAt)
     ))
-    .orderBy(desc(projects.updatedAt));
+    .orderBy(desc(projects.updatedAt))
+    .limit(limit)
+    .offset(offset);
 
-  // Get source counts and latest run status
-  const result: ProjectListItem[] = [];
+  // Get source counts and latest run status (using Promise.all for parallel queries)
+  const result: ProjectListItem[] = await Promise.all(
+    projectList.map(async (project) => {
+      const [[sourceCountResult], [latestRun]] = await Promise.all([
+        db.select({ count: count() }).from(sources).where(eq(sources.projectId, project.id)),
+        db.select({ status: processingRuns.status })
+          .from(processingRuns)
+          .where(eq(processingRuns.projectId, project.id))
+          .orderBy(desc(processingRuns.createdAt))
+          .limit(1),
+      ]);
 
-  for (const project of projectList) {
-    const [sourceCount] = await db
-      .select({ count: count() })
-      .from(sources)
-      .where(eq(sources.projectId, project.id));
+      return {
+        ...project,
+        sourceCount: sourceCountResult.count,
+        latestRunStatus: latestRun?.status || null,
+      };
+    })
+  );
 
-    const [latestRun] = await db
-      .select({ status: processingRuns.status })
-      .from(processingRuns)
-      .where(eq(processingRuns.projectId, project.id))
-      .orderBy(desc(processingRuns.createdAt))
-      .limit(1);
-
-    result.push({
-      ...project,
-      sourceCount: sourceCount.count,
-      latestRunStatus: latestRun?.status || null,
-    });
-  }
-
-  return result;
+  return {
+    data: result,
+    pagination: { page, limit, total },
+  };
 }
 
 /**

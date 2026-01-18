@@ -9,6 +9,7 @@ import {
   listSources,
   getSourceById,
   createFileSource,
+  createApiSource,
   selectExcelSheet,
   deleteSource,
   getFieldMappings,
@@ -37,6 +38,16 @@ const updateMappingsSchema = z.object({
       'custom',
     ]).nullable(),
   })),
+});
+
+const createApiSourceSchema = z.object({
+  connectionId: z.number().int().positive(),
+  config: z.object({
+    inbox: z.string().optional(),
+    status: z.string().optional(),
+    dateRangeStart: z.string().datetime().optional(),
+    dateRangeEnd: z.string().datetime().optional(),
+  }).optional().default({}),
 });
 
 /**
@@ -80,6 +91,26 @@ router.post(
     }
   }
 );
+
+/**
+ * POST /api/projects/:projectId/sources/api
+ * Create an API data source from a connection
+ */
+router.post('/api', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = parseIntParam(req.params.projectId as string, 'projectId');
+    const data = createApiSourceSchema.parse(req.body);
+    const source = await createApiSource(
+      projectId,
+      req.user!.organizationId,
+      data.connectionId,
+      data.config
+    );
+    sendCreated(res, source);
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * GET /api/projects/:projectId/sources/:sourceId

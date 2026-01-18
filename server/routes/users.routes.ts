@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin } from '../middleware/auth';
-import { sendSuccess, sendPaginated } from '../lib/response';
+import { sendSuccess, sendCreated, sendPaginated } from '../lib/response';
 import { parseIntParam, parseQueryInt } from '../lib/validation';
 import {
   listUsers,
@@ -57,7 +57,7 @@ router.post('/invite', requireAuth, requireAdmin, async (req: Request, res: Resp
       response.devUrl = result.devUrl;
     }
 
-    sendSuccess(res, response);
+    sendCreated(res, response);
   } catch (error) {
     next(error);
   }
