@@ -1,10 +1,11 @@
-# Agent 8: Code Review Agent --- GPT Prompt v1.5
+# Agent 8: Code Review Agent --- GPT Prompt v1.6
 
 ## VERSION HISTORY
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.5 | 2025-01 | Current version |
+| 1.6 | 2025-01 | Added insecure random detection (Pattern 5.17), error boundary check (Pattern 5.18), auth page completeness check (Pattern 5.19) |
+| 1.5 | 2025-01 | Previous version |
 | 1.4 | 2025-01 | Fixed backtick escaping in code examples, encoding fixes |
 | 1.3 | 2025-01 | Added memory-intensive processing detection (Pattern 5.15), package version pinning check (Pattern 5.16) |
 | 1.2 | 2025-01 | Replit deployment audit fixes: Added N+1 query detection, async/await verification, response envelope check, Zod validation check, component existence check, unused env var detection |
@@ -553,6 +554,78 @@ Verify dependencies are properly versioned:
 - Any `"latest"` in package.json dependencies
 - Missing caret (`^`) on version numbers
 
+#### Pattern 5.17: Insecure Random Detection (CRITICAL)
+
+Flag any use of Math.random() for security-sensitive purposes:
+
+```typescript
+// ❌ FLAG AS CRITICAL - Insecure random for security
+const tempPassword = Math.random().toString(36).slice(-12);
+const token = Math.random().toString(36);
+const sessionId = `session_${Math.random()}`;
+
+// ✅ CORRECT - Use crypto module
+import { randomBytes, randomUUID } from 'crypto';
+const tempPassword = randomBytes(12).toString('base64url').slice(0, 16);
+const token = randomBytes(32).toString('base64url');
+const sessionId = randomUUID();
+```
+
+**Scan for**:
+- `Math.random()` in server code (not test files)
+- `Math.random()` near keywords: password, token, secret, key, session, auth
+- `.toString(36)` pattern (common insecure token generation)
+
+**Auto-fix suggestion**: Replace with crypto.randomBytes() or crypto.randomUUID().
+
+#### Pattern 5.18: Error Boundary Check
+
+Verify React applications have error boundary protection:
+
+```typescript
+// ❌ FLAG IF MISSING - No error boundary in App
+function App() {
+  return (
+    <Router>
+      <Routes>...</Routes>
+    </Router>
+  );
+}
+
+// ✅ CORRECT - Error boundary wraps app
+function App() {
+  return (
+    <ErrorBoundary fallback={<ErrorFallback />}>
+      <Router>
+        <Routes>...</Routes>
+      </Router>
+    </ErrorBoundary>
+  );
+}
+```
+
+**Scan for**:
+- Presence of ErrorBoundary component or componentDidCatch method
+- App.tsx should import and use error boundary
+
+**Auto-fix suggestion**: Add ErrorBoundary component.
+
+#### Pattern 5.19: Auth Page Completeness Check
+
+Verify frontend has pages for all auth-related API endpoints:
+
+| API Endpoint | Required Page File |
+|--------------|-------------------|
+| POST /api/auth/forgot-password | forgot-password.tsx |
+| POST /api/auth/reset-password | reset-password.tsx |
+| POST /api/invitations/:token/accept | accept-invite.tsx |
+
+**Scan for**:
+- Auth endpoints in server/routes/auth.ts
+- Corresponding page files in client/src/pages/
+
+**Flag as CRITICAL if**: API endpoint exists but frontend page is missing.
+
 ---
 
 ### Phase 6: Compile Findings
@@ -816,7 +889,7 @@ The audit report has two sections:
 | Audit Date | [Date] |
 | Audit Version | [X] |
 | Codebase | [Project name/identifier] |
-| Auditor | Agent 8: Code Review Agent v1.5 |
+| Auditor | Agent 8: Code Review Agent v1.6 |
 
 ---
 
