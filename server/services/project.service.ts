@@ -8,7 +8,7 @@ import {
   type Source,
   type ProcessingConfig,
 } from '../db/schema';
-import { eq, and, isNull, desc, count } from 'drizzle-orm';
+import { eq, and, isNull, desc, count, inArray, sql } from 'drizzle-orm';
 import { NotFoundError, ConflictError } from '../errors';
 
 export interface ProjectListItem {
@@ -28,8 +28,10 @@ export interface ProjectDetails extends ProjectListItem {
 
 /**
  * List projects for an organization
+ * Optimized to avoid N+1 queries by batching source counts and latest run statuses
  */
 export async function listProjects(organizationId: number): Promise<ProjectListItem[]> {
+  // Get all projects in one query
   const projectList = await db
     .select({
       id: projects.id,
@@ -45,30 +47,40 @@ export async function listProjects(organizationId: number): Promise<ProjectListI
     ))
     .orderBy(desc(projects.updatedAt));
 
-  // Get source counts and latest run status
-  const result: ProjectListItem[] = [];
-
-  for (const project of projectList) {
-    const [sourceCount] = await db
-      .select({ count: count() })
-      .from(sources)
-      .where(eq(sources.projectId, project.id));
-
-    const [latestRun] = await db
-      .select({ status: processingRuns.status })
-      .from(processingRuns)
-      .where(eq(processingRuns.projectId, project.id))
-      .orderBy(desc(processingRuns.createdAt))
-      .limit(1);
-
-    result.push({
-      ...project,
-      sourceCount: sourceCount.count,
-      latestRunStatus: latestRun?.status || null,
-    });
+  if (projectList.length === 0) {
+    return [];
   }
 
-  return result;
+  const projectIds = projectList.map((p) => p.id);
+
+  // Get all source counts in one query
+  const sourceCounts = await db
+    .select({
+      projectId: sources.projectId,
+      count: count(),
+    })
+    .from(sources)
+    .where(inArray(sources.projectId, projectIds))
+    .groupBy(sources.projectId);
+
+  // Get latest run status for each project using a subquery with DISTINCT ON
+  const latestRuns = await db.execute<{ project_id: number; status: string }>(sql`
+    SELECT DISTINCT ON (project_id) project_id, status
+    FROM processing_runs
+    WHERE project_id = ANY(${projectIds})
+    ORDER BY project_id, created_at DESC
+  `);
+
+  // Build lookup maps for O(1) access
+  const sourceCountMap = new Map(sourceCounts.map((s) => [s.projectId, s.count]));
+  const latestRunMap = new Map(latestRuns.map((r) => [r.project_id, r.status]));
+
+  // Combine results
+  return projectList.map((project) => ({
+    ...project,
+    sourceCount: sourceCountMap.get(project.id) || 0,
+    latestRunStatus: latestRunMap.get(project.id) || null,
+  }));
 }
 
 /**
