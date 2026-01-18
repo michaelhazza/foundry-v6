@@ -433,15 +433,17 @@ async function processProjectAsync(
       for (const record of records) {
         rowNumber++;
 
-        // Check if run was cancelled
-        const [currentRun] = await db
-          .select({ status: processingRuns.status })
-          .from(processingRuns)
-          .where(eq(processingRuns.id, runId))
-          .limit(1);
+        // Check if run was cancelled every 100 records to avoid N+1 query pattern
+        if (rowNumber % 100 === 0) {
+          const [currentRun] = await db
+            .select({ status: processingRuns.status })
+            .from(processingRuns)
+            .where(eq(processingRuns.id, runId))
+            .limit(1);
 
-        if (currentRun?.status === 'cancelled') {
-          return;
+          if (currentRun?.status === 'cancelled') {
+            return;
+          }
         }
 
         try {

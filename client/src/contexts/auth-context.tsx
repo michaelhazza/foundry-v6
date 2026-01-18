@@ -17,6 +17,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   updateUser: (user: User) => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -73,6 +74,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setStoredUser(updatedUser);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const userData = await api.get<User>('/auth/me');
+      setUser(userData);
+      setStoredUser(userData);
+    } catch {
+      // Silent fail - user state remains unchanged
+    }
+  }, []);
+
   const value = {
     user,
     isLoading,
@@ -80,6 +91,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     logout,
     updateUser,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
