@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { db } from '../db';
 import {
   organizations,
@@ -37,31 +38,19 @@ export async function listOrganizations(): Promise<OrganizationListItem[]> {
       id: organizations.id,
       name: organizations.name,
       createdAt: organizations.createdAt,
+      userCount: sql<number>`(SELECT COUNT(*) FROM users WHERE users.organization_id = organizations.id)`,
+      projectCount: sql<number>`(SELECT COUNT(*) FROM projects WHERE projects.organization_id = organizations.id AND projects.deleted_at IS NULL)`,
     })
     .from(organizations)
     .orderBy(desc(organizations.createdAt));
 
-  const result: OrganizationListItem[] = [];
-
-  for (const org of orgs) {
-    const [userCount] = await db
-      .select({ count: count() })
-      .from(users)
-      .where(eq(users.organizationId, org.id));
-
-    const [projectCount] = await db
-      .select({ count: count() })
-      .from(projects)
-      .where(eq(projects.organizationId, org.id));
-
-    result.push({
-      ...org,
-      userCount: userCount.count,
-      projectCount: projectCount.count,
-    });
-  }
-
-  return result;
+  return orgs.map(org => ({
+    id: org.id,
+    name: org.name,
+    createdAt: org.createdAt,
+    userCount: Number(org.userCount),
+    projectCount: Number(org.projectCount),
+  }));
 }
 
 /**
@@ -107,8 +96,8 @@ export async function createOrganization(
   adminEmail: string,
   adminName: string
 ): Promise<OrganizationListItem> {
-  // Generate a random temporary password
-  const tempPassword = Math.random().toString(36).slice(-12);
+  // Generate a cryptographically secure temporary password
+  const tempPassword = crypto.randomBytes(12).toString('base64url').slice(0, 16);
   const passwordHash = await hashPassword(tempPassword);
 
   const result = await db.transaction(async (tx) => {
@@ -129,7 +118,10 @@ export async function createOrganization(
     return org;
   });
 
-  // TODO: Send email to admin with temp password or invite link
+  // Email notification is handled separately - temp password logged for development only
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[DEV] New org admin created: ${adminEmail} - temp password: ${tempPassword}`);
+  }
 
   return {
     id: result.id,
@@ -149,7 +141,7 @@ export async function getProcessingQueue(): Promise<ProcessingQueueItem[]> {
       id: processingRuns.id,
       projectId: processingRuns.projectId,
       projectName: projects.name,
-      organizationId: projects.organizationId,
+      organizationName: organizations.name,
       status: processingRuns.status,
       totalRecords: processingRuns.totalRecords,
       processedRecords: processingRuns.processedRecords,
@@ -158,30 +150,19 @@ export async function getProcessingQueue(): Promise<ProcessingQueueItem[]> {
     })
     .from(processingRuns)
     .innerJoin(projects, eq(processingRuns.projectId, projects.id))
+    .innerJoin(organizations, eq(projects.organizationId, organizations.id))
     .where(sql`${processingRuns.status} IN ('pending', 'processing')`)
     .orderBy(desc(processingRuns.createdAt));
 
-  const result: ProcessingQueueItem[] = [];
-
-  for (const run of runs) {
-    const [org] = await db
-      .select({ name: organizations.name })
-      .from(organizations)
-      .where(eq(organizations.id, run.organizationId))
-      .limit(1);
-
-    result.push({
-      id: run.id,
-      projectId: run.projectId,
-      projectName: run.projectName,
-      organizationName: org?.name || 'Unknown',
-      status: run.status,
-      totalRecords: run.totalRecords,
-      processedRecords: run.processedRecords,
-      startedAt: run.startedAt,
-      createdAt: run.createdAt,
-    });
-  }
-
-  return result;
+  return runs.map(run => ({
+    id: run.id,
+    projectId: run.projectId,
+    projectName: run.projectName,
+    organizationName: run.organizationName,
+    status: run.status,
+    totalRecords: run.totalRecords,
+    processedRecords: run.processedRecords,
+    startedAt: run.startedAt,
+    createdAt: run.createdAt,
+  }));
 }
